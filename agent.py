@@ -54,46 +54,21 @@ def run_agent(user_id: int, user_message: str) -> str:
         "content": user_message
     })
 
-    messages = conversation_history[user_id].copy()
+    response = claude.messages.create(
+        model="claude-haiku-4-5-20251001",
+        max_tokens=1024,
+        system="Ты личный помощник. Отвечай на русском языке. Будь кратким и полезным.",
+        messages=conversation_history[user_id]
+    )
 
-    while True:
-        response = claude.messages.create(
-            model="claude-haiku-4-5-20251001",
-            max_tokens=1024,
-            system="Ты личный помощник. Отвечай на русском языке. Будь кратким.",
-            tools=tools,
-            messages=messages
-        )
+    reply = response.content[0].text
 
-        if response.stop_reason == "end_turn":
-            final_text = ""
-            for block in response.content:
-                if hasattr(block, "text"):
-                    final_text = block.text
+    conversation_history[user_id].append({
+        "role": "assistant",
+        "content": reply
+    })
 
-            conversation_history[user_id].append({
-                "role": "assistant",
-                "content": final_text
-            })
-
-            if len(conversation_history[user_id]) > 20:
-                conversation_history[user_id] = conversation_history[user_id][-20:]
-
-            return final_text
-
-        if response.stop_reason == "tool_use":
-            messages.append({"role": "assistant", "content": response.content})
-            tool_results = []
-            for block in response.content:
-                if block.type == "tool_use":
-                    func = tool_map[block.name]
-                    result = func(**block.input)
-                    tool_results.append({
-                        "type": "tool_result",
-                        "tool_use_id": block.id,
-                        "content": result
-                    })
-            messages.append({"role": "user", "content": tool_results})
+    return reply
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
